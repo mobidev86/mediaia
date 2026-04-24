@@ -1,0 +1,26 @@
+Testing the Modules
+
+- php artisan queue:restart
+- php artisan queue:work
+
+Auto-Captioner (Module 2):
+    - php artisan media:caption storage/app/Tailwind_in_100_Seconds_720P.mp4 --format=srt --burn-in
+    - php artisan media:caption storage/app/caption-video.mp4 --format=vtt --burn-in --sync
+
+
+
+Hi Ryan,
+
+So, Previously, I shared a video demonstration on Part 1 i.e. Audio enhancement.
+
+Now I'm demoing you about the 2nd part i.e. Generate captions for the source video.
+
+Here is the source video.
+
+As you can see this is without the captions. Now, I'm going to trigger the command so that
+it will generate a new video with captions on it.
+
+As I have triggered that command, my jobs are started in background and once it's 
+processed, we will have a new video.
+
+I am going to showcase you in a moment only once Job is executed successfully.

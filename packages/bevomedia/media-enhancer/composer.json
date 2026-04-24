@@ -1,0 +1,29 @@
+{
+    "name": "bevomedia/media-enhancer",
+    "version": "1.0.0",
+    "description": "A basic Laravel package for media enhancement structure.",
+    "type": "library",
+    "license": "MIT",
+    "authors": [
+        {
+            "name": "BevoMedia",
+            "email": "support@bevomedia.com"
+        }
+    ],
+    "require": {
+        "php": "^8.1|^8.2|^8.3",
+        "illuminate/support": "^10.0|^11.0|^12.0|^13.0"
+    },
+    "autoload": {
+        "psr-4": {
+            "BevoMedia\\MediaEnhancer\\": "src/"
+        }
+    },
+    "extra": {
+        "laravel": {
+            "providers": [
+                "BevoMedia\\MediaEnhancer\\MediaAIServiceProvider"
+            ]
+        }
+    }
+}
