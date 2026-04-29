@@ -100,6 +100,10 @@ class ProcessCaptionJob implements ShouldQueue
             if (file_exists($this->audioInput)) {
                 unlink($this->audioInput);
             }
+
+            if ($job && $job->input_path && file_exists($job->input_path)) {
+                @unlink($job->input_path);
+            }
         }
     }
 }

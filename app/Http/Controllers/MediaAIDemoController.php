@@ -7,6 +7,8 @@ use BevoMedia\MediaEnhancer\Facades\AudioEnhancer;
 use BevoMedia\MediaEnhancer\Facades\VideoCaptioner;
 use BevoMedia\MediaEnhancer\Facades\TextAnimator;
 use Illuminate\Support\Facades\Storage;
+use Illuminate\Validation\ValidationException;
+use BevoMedia\MediaEnhancer\Models\MediaJob;
 
 class MediaAIDemoController extends Controller
 {
@@ -36,6 +38,8 @@ class MediaAIDemoController extends Controller
                 default:
                     return response()->json(['error' => 'Invalid processing type.'], 400);
             }
+        } catch (ValidationException $e) {
+            throw $e;
         } catch (\Exception $e) {
             return response()->json(['error' => $e->getMessage()], 500);
         }
@@ -50,15 +54,12 @@ class MediaAIDemoController extends Controller
         $path = $request->file('file')->store('temp');
         $inputPath = Storage::path($path);
 
-        $result = AudioEnhancer::process($inputPath, 'default', true);
-
-        // Clean up temp file
-       @unlink($inputPath);
+        $result = AudioEnhancer::process($inputPath, 'default', false);
 
         return response()->json([
             'success' => true,
-            'download_url' => route('demo.download', ['file' => basename($result['output_path'])]),
-            'filename' => basename($result['output_path'])
+            'job_id' => $result['job_id'],
+            'status' => $result['status']
         ]);
     }
 
@@ -74,15 +75,12 @@ class MediaAIDemoController extends Controller
         $result = VideoCaptioner::generate($inputPath, [
             'format' => 'srt',
             'burn_in' => true,
-        ], true);
-
-        // Clean up temp file
-        @unlink($inputPath);
+        ], false);
 
         return response()->json([
             'success' => true,
-            'download_url' => route('demo.download', ['file' => basename($result['output_path'])]),
-            'filename' => basename($result['output_path'])
+            'job_id' => $result['job_id'],
+            'status' => $result['status']
         ]);
     }
 
@@ -102,13 +100,38 @@ class MediaAIDemoController extends Controller
             'fps' => 24,
         ];
 
-        $result = TextAnimator::render($text, $options, true);
+        $result = TextAnimator::render($text, $options, false);
 
         return response()->json([
             'success' => true,
-            'download_url' => route('demo.download', ['file' => basename($result['output_path'])]),
-            'filename' => basename($result['output_path'])
+            'job_id' => $result['job_id'],
+            'status' => $result['status']
         ]);
+    }
+
+    /**
+     * Check the status of a media job.
+     */
+    public function checkStatus($jobId)
+    {
+        $job = MediaJob::where('uuid', $jobId)->first();
+
+        if (!$job) {
+            return response()->json(['error' => 'Job not found.'], 404);
+        }
+
+        $response = [
+            'status' => $job->status,
+        ];
+
+        if ($job->status === 'completed') {
+            $response['download_url'] = route('demo.download', ['file' => basename($job->output_path)]);
+            $response['filename'] = basename($job->output_path);
+        } elseif ($job->status === 'failed') {
+            $response['error'] = $job->error_message ?? 'Unknown processing error.';
+        }
+
+        return response()->json($response);
     }
 
     /**

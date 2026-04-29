@@ -115,6 +115,8 @@
     <meta name="csrf-token" content="{{ csrf_token() }}">
 
     <script>
+        let pollingIntervals = {};
+
         async function handleProcess(event, type) {
             event.preventDefault();
             const form = event.target;
@@ -124,12 +126,17 @@
             formData.append('type', type);
 
             // UI Reset
+            if (pollingIntervals[type]) {
+                clearInterval(pollingIntervals[type]);
+                delete pollingIntervals[type];
+            }
+            
             btn.disabled = true;
             btn.classList.add('opacity-50', 'cursor-not-allowed');
             statusDiv.innerHTML = `
                 <div class="flex items-center gap-3 text-blue-400">
                     <div class="loader w-5 h-5 border-2 border-transparent border-t-blue-500 rounded-full"></div>
-                    <span>Processing media... please wait.</span>
+                    <span id="status-text-${type}">Uploading media... please wait.</span>
                 </div>
             `;
             statusDiv.classList.remove('hidden');
@@ -147,15 +154,11 @@
                 const result = await response.json();
 
                 if (response.ok && result.success) {
-                    statusDiv.innerHTML = `
-                        <div class="p-4 bg-green-500/10 border border-green-500/20 rounded-xl">
-                            <p class="text-green-400 text-sm font-medium mb-3">✓ Processing Complete!</p>
-                            <a href="${result.download_url}" class="inline-flex items-center text-sm font-bold text-white hover:underline">
-                                <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4 mr-2" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" x2="12" y1="15" y2="3"/></svg>
-                                Download Result
-                            </a>
-                        </div>
-                    `;
+                    if (result.job_id) {
+                        startPolling(result.job_id, type, btn, statusDiv);
+                    } else if (result.download_url) {
+                        showCompleted(result, statusDiv, btn);
+                    }
                 } else {
                     let errorMessage = result.error || result.message || 'Processing failed';
                     if (result.errors) {
@@ -164,16 +167,58 @@
                     throw new Error(errorMessage);
                 }
             } catch (error) {
-                statusDiv.innerHTML = `
-                    <div class="p-4 bg-red-500/10 border border-red-500/20 rounded-xl text-red-400 text-sm">
-                        ${error.message}
-                    </div>
-                `;
+                showError(error.message, statusDiv, btn);
             }
- finally {
-                btn.disabled = false;
-                btn.classList.remove('opacity-50', 'cursor-not-allowed');
-            }
+        }
+
+        function startPolling(jobId, type, btn, statusDiv) {
+            const statusText = document.getElementById(`status-text-${type}`);
+            if (statusText) statusText.innerText = "Processing in background... please wait.";
+
+            pollingIntervals[type] = setInterval(async () => {
+                try {
+                    const response = await fetch(`/demo/status/${jobId}`, {
+                        headers: { 'Accept': 'application/json' }
+                    });
+                    const result = await response.json();
+
+                    if (result.status === 'completed') {
+                        clearInterval(pollingIntervals[type]);
+                        showCompleted(result, statusDiv, btn);
+                    } else if (result.status === 'failed') {
+                        clearInterval(pollingIntervals[type]);
+                        showError(result.error || 'Processing failed', statusDiv, btn);
+                    } else if (result.status === 'processing') {
+                        if (statusText) statusText.innerText = "Currently processing your media...";
+                    }
+                } catch (error) {
+                    console.error('Polling error:', error);
+                }
+            }, 3000);
+        }
+
+        function showCompleted(result, statusDiv, btn) {
+            statusDiv.innerHTML = `
+                <div class="p-4 bg-green-500/10 border border-green-500/20 rounded-xl">
+                    <p class="text-green-400 text-sm font-medium mb-3">✓ Processing Complete!</p>
+                    <a href="${result.download_url}" class="inline-flex items-center text-sm font-bold text-white hover:underline">
+                        <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4 mr-2" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" x2="12" y1="15" y2="3"/></svg>
+                        Download Result
+                    </a>
+                </div>
+            `;
+            btn.disabled = false;
+            btn.classList.remove('opacity-50', 'cursor-not-allowed');
+        }
+
+        function showError(message, statusDiv, btn) {
+            statusDiv.innerHTML = `
+                <div class="p-4 bg-red-500/10 border border-red-500/20 rounded-xl text-red-400 text-sm">
+                    ${message}
+                </div>
+            `;
+            btn.disabled = false;
+            btn.classList.remove('opacity-50', 'cursor-not-allowed');
         }
     </script>
 </body>
