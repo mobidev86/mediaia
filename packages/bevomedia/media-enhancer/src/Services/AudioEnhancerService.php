@@ -18,35 +18,10 @@ class AudioEnhancerService
         $jobId = (string) Str::uuid();
 
         $tmpDir = storage_path("app/tmp");
-        if (!file_exists($tmpDir)) {
-            mkdir($tmpDir, 0755, true);
-        }
 
         $tmpInput = "{$tmpDir}/{$jobId}.wav";
 
-        // Step 1: Extract audio with EQ filters
-        $filters = $this->getFFmpegFilters($preset);
-        
-        $command = [
-            config('media-ai.ffmpeg_path', 'ffmpeg'),
-            '-i', $inputPath,
-            '-vn',
-            '-acodec', 'pcm_s16le',
-            '-ar', '44100',
-        ];
-
-        if ($filters) {
-            $command[] = '-af';
-            $command[] = $filters;
-        }
-
-        $command[] = $tmpInput;
-
-        $result = Process::run($command);
-
-        if ($result->failed()) {
-            throw new \Exception("FFmpeg audio extraction failed: " . $result->errorOutput());
-        }
+        // Note: Audio extraction has been moved to ProcessAudioJob for asynchronous execution
 
         // Step 2: Save DB
         $job = MediaJob::create([

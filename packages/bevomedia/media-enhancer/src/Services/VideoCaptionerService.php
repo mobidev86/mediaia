@@ -18,28 +18,10 @@ class VideoCaptionerService
         $jobId = (string) Str::uuid();
 
         $tmpDir = storage_path("app/tmp");
-        if (!file_exists($tmpDir)) {
-            mkdir($tmpDir, 0755, true);
-        }
 
         $tmpInput = "{$tmpDir}/{$jobId}.wav";
 
-        // Step 1: Extract audio using FFmpeg
-        $command = [
-            config('media-ai.ffmpeg_path', 'ffmpeg'),
-            '-i', $inputPath,
-            '-vn',
-            '-acodec', 'pcm_s16le',
-            '-ar', '16000', // Whisper works well with 16kHz
-            '-ac', '1',
-            $tmpInput
-        ];
-
-        $result = Process::run($command);
-
-        if ($result->failed()) {
-            throw new \Exception("FFmpeg audio extraction failed: " . $result->errorOutput());
-        }
+        // Note: Audio extraction has been moved to ProcessCaptionJob for asynchronous execution
 
         // Step 2: Save DB
         $job = MediaJob::create([

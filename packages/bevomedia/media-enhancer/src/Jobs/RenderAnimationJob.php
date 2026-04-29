@@ -48,7 +48,7 @@ class RenderAnimationJob implements ShouldQueue
                 '--fps', $this->options['fps'] ?? 30,
             ];
 
-            $result = Process::timeout(120)->run($command);
+            $result = Process::timeout(3600)->run($command);
 
             if ($result->failed()) {
                 throw new \Exception($result->errorOutput());

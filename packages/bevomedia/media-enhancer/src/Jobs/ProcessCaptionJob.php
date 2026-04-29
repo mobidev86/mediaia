@@ -36,10 +36,52 @@ class ProcessCaptionJob implements ShouldQueue
                 mkdir($outputDir, 0755, true);
             }
 
+            $tmpDir = storage_path("app/tmp");
+            if (!file_exists($tmpDir)) {
+                mkdir($tmpDir, 0755, true);
+            }
+
+            $ffmpegPath = config('media-ai.ffmpeg_path', 'ffmpeg');
+            $pythonPath = config('media-ai.python_path', 'python3');
+
+            // Binary validations
+            if (str_starts_with($ffmpegPath, '/') && !file_exists($ffmpegPath)) {
+                throw new \Exception("FFmpeg executable not found at: {$ffmpegPath}");
+            }
+            if (str_starts_with($pythonPath, '/') && !file_exists($pythonPath)) {
+                throw new \Exception("Python executable not found at: {$pythonPath}");
+            }
+
+            if (!file_exists($job->input_path)) {
+                throw new \Exception("Input file missing before extraction: {$job->input_path}");
+            }
+
+            // 1. Extract audio using FFmpeg
+            $command = [
+                $ffmpegPath,
+                '-y',
+                '-i', $job->input_path,
+                '-vn',
+                '-acodec', 'pcm_s16le',
+                '-ar', '16000', // Whisper works well with 16kHz
+                '-ac', '1',
+                $this->audioInput
+            ];
+
+            $extractResult = Process::timeout(3600)->run($command);
+
+            if ($extractResult->failed()) {
+                throw new \Exception("FFmpeg audio extraction failed: " . $extractResult->errorOutput());
+            }
+
+            if (!file_exists($this->audioInput)) {
+                throw new \Exception("FFmpeg extraction reported success but output file is missing: {$this->audioInput}");
+            }
+
             $format = $this->options['format'] ?? 'srt';
             $subtitleOutput = rtrim($outputDir, '/') . "/{$this->jobId}.{$format}";
 
-            // 1. Run transcribe Python script
+            // 2. Run transcribe Python script
             $apiKey = config('media-ai.caption.openai_api_key');
             $pythonPath = config('media-ai.python_path', 'python3');
             $scriptPath = config('media-ai.python_transcribe_script_path');
@@ -48,7 +90,7 @@ class ProcessCaptionJob implements ShouldQueue
                 throw new \Exception("OpenAI API Key is missing. Please set MEDIA_ENHANCER_OPENAI_KEY.");
             }
 
-            $result = Process::env(['OPENAI_API_KEY' => $apiKey])->run([
+            $result = Process::env(['OPENAI_API_KEY' => $apiKey])->timeout(3600)->run([
                 $pythonPath,
                 $scriptPath,
                 '--input', $this->audioInput,
@@ -68,7 +110,7 @@ class ProcessCaptionJob implements ShouldQueue
                 $videoOutput = rtrim($outputDir, '/') . "/{$this->jobId}_captioned.mp4";
                 $originalVideo = $job->input_path;
 
-                $burnResult = Process::run([
+                $burnResult = Process::timeout(3600)->run([
                     config('media-ai.ffmpeg_path', 'ffmpeg'),
                     '-i', $originalVideo,
                     '-vf', "subtitles={$subtitleOutput}",
@@ -81,6 +123,14 @@ class ProcessCaptionJob implements ShouldQueue
                 }
 
                 $finalOutput = $videoOutput;
+            }
+
+            // Cleanup original and temp files on success
+            if (file_exists($this->audioInput)) {
+                @unlink($this->audioInput);
+            }
+            if ($job->input_path && file_exists($job->input_path)) {
+                @unlink($job->input_path);
             }
 
             $job->update([
@@ -97,12 +147,9 @@ class ProcessCaptionJob implements ShouldQueue
                 'error_message' => $e->getMessage()
             ]);
         } finally {
+            // Only clean up temporary .wav if it still exists (original is handled in success block)
             if (file_exists($this->audioInput)) {
-                unlink($this->audioInput);
-            }
-
-            if ($job && $job->input_path && file_exists($job->input_path)) {
-                @unlink($job->input_path);
+                @unlink($this->audioInput);
             }
         }
     }
